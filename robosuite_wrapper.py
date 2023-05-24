@@ -5,11 +5,14 @@ from robosuite import load_controller_config
 from gym.envs.registration import register
 
 class RobosuiteWrapper(gym.Env):
-    def __init__(self, horizon=100, fast_forward=None):
+    def __init__(self, horizon=100, sub_mdp=None):
         self.camera_names = ['frontview', 'robot0_eye_in_hand']
 
         config = load_controller_config(default_controller='OSC_POSITION')
 
+        # PickAndPlace env
+        # bin1_pos=(0.1, -0.25, 0.8)
+        # bin2_pos=(0.1, 0.28, 0.8)
         env = robosuite.make(
             env_name="PickPlaceCan",
             robots="Panda",
@@ -22,41 +25,50 @@ class RobosuiteWrapper(gym.Env):
             horizon=1000
         )
         self.horizon = horizon
-        self.fast_forward = fast_forward
         self._env = env
+        self.sub_mdp = sub_mdp
+
         self.action_space = gym.spaces.Box(low=-1, high=1, shape=(4,), dtype=float)
+        # self.observation_space = gym.spaces.Box(low=-10, high=10, shape=(7,), dtype=float)
 
     def _get_obs(self):
         obs = self._env._get_observations()
         return self._unpack_obs(obs)
     
-    def heuritic_fast_forward(self, mode='reach', render=False):
-        if mode == 'reach':  # move to the can
+    def move_to_pos(self, goal_pos, gripper_action=0, tol=0.01, render=False):
+        obs = self._get_obs()
+        hand_pos = obs['hand_pos']
+        while np.linalg.norm(goal_pos - hand_pos) > tol:
+            action = np.zeros(4)
+            action[:3] = (goal_pos - hand_pos) * 10
+            action[3] = gripper_action
+            obs, _, _, _ = self.step(action)
+            hand_pos = obs['hand_pos']
+            if render:
+                self._env.render()
+
+    def fast_forward(self, mode='box', render=False):
+        if mode == 'box':
+            self.move_to_pos(np.array([0.1, -0.25, 1]), gripper_action=-1, render=render)
+
+        # holding the can
+        if mode == 'move':
             obs = self._get_obs()
             can_pos = obs['can_pos']
-            hand_pos = obs['hand_pos']
-            while np.linalg.norm(can_pos + np.array([0, 0, 0.1]) - hand_pos) > 0.01:
-                heuristic_action = -np.ones(4)
-                heuristic_action[:3] = (can_pos + np.array([0, 0, 0.1]) - hand_pos) * 10
-                obs, _, _, _ = self.step(heuristic_action)
-                can_pos = obs['can_pos']
-                hand_pos = obs['hand_pos']
-                if render:
-                    self._env.render()
-            while np.linalg.norm(can_pos + np.array([0, 0, 0.005]) - hand_pos) > 0.01:
-                heuristic_action = -np.ones(4)
-                heuristic_action[:3] = (can_pos + np.array([0, 0, 0.005]) - hand_pos) * 10
-                obs, _, _, _ = self.step(heuristic_action)
-                can_pos = obs['can_pos']
-                hand_pos = obs['hand_pos']
-                if render:
-                    self._env.render()
-        if mode == 'grasp':
-            self.heuritic_fast_forward(mode='reach')
+            self.move_to_pos(can_pos + np.array([0, 0, 0.1]), gripper_action=-1, render=render)
+            self.move_to_pos(can_pos, gripper_action=-1, render=render)
             for _ in range(4):
                 self.step(np.array([0, 0, 0, 1]))
                 if render:
                     self._env.render()
+        
+        if mode == 'place':
+            self.fast_forward(mode='move', render=render)
+            obs = self._get_obs()
+            hand_pos = obs['hand_pos']
+            raised_pos = hand_pos.copy()
+            raised_pos[2] = 1
+            self.move_to_pos(raised_pos, gripper_action=1, render=render)
 
     def _unpack_obs(self, obs):
         unpacked_obs = {
@@ -73,12 +85,12 @@ class RobosuiteWrapper(gym.Env):
 
     def reset(self):
         self._env.reset()
-        if self.fast_forward is not None:
-            self.heuritic_fast_forward(mode=self.fast_forward)
+        if self.sub_mdp is not None:
+            self.fast_forward(mode=self.sub_mdp)
         return self._get_obs()
 
     def render(self, *args, **kwargs):
-        self._env.render()
+        self._env.render(*args, **kwargs)
 
     @property
     def _max_episode_steps(self):
@@ -95,22 +107,22 @@ class RobosuiteWrapper(gym.Env):
 
 def register_envs():
     register(
-        id="ReachCan-v1",
+        id="Box-v1",
         entry_point=RobosuiteWrapper,
         max_episode_steps=100,
-        kwargs={'fast_forward': None}
+        kwargs={'sub_mdp': 'box'}
     )
     register(
-        id="GraspCan-v1",
+        id="Move-v1",
         entry_point=RobosuiteWrapper,
         max_episode_steps=100,
-        kwargs={'fast_forward': 'reach'}
+        kwargs={'sub_mdp': 'move'}
     )
     register(
-        id="PlaceCan-v1",
+        id="Place-v1",
         entry_point=RobosuiteWrapper,
         max_episode_steps=100,
-        kwargs={'fast_forward': 'grasp'}
+        kwargs={'sub_mdp': 'place'}
     )
 
 
@@ -118,6 +130,6 @@ register_envs()
 
 
 if __name__ == '__main__':
-    env = RobosuiteWrapper('PickPlaceCan')
-    o = env.reset()
-    env.heuritic_fast_forward('grasp', render=True)
+    env = RobosuiteWrapper()
+    env.reset()
+    env.fast_forward('place', render=True)
