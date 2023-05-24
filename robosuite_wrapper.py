@@ -33,17 +33,24 @@ class RobosuiteWrapper(gym.Env):
 
     def _get_obs(self):
         obs = self._env._get_observations()
-        return self._unpack_obs(obs)
+        return self._process_obs(obs)
     
+    def _get_hand_pos(self):
+        obs = self._env._get_observations()
+        return obs['robot0_eef_pos']
+    
+    def _get_can_pos(self):
+        obs = self._env._get_observations()
+        return obs['Can_pos']
+
     def move_to_pos(self, goal_pos, gripper_action=0, tol=0.01, render=False):
-        obs = self._get_obs()
-        hand_pos = obs['hand_pos']
+        hand_pos = self._get_hand_pos()
         while np.linalg.norm(goal_pos - hand_pos) > tol:
             action = np.zeros(4)
             action[:3] = (goal_pos - hand_pos) * 10
             action[3] = gripper_action
             obs, _, _, _ = self.step(action)
-            hand_pos = obs['hand_pos']
+            hand_pos = obs[:3]
             if render:
                 self._env.render()
 
@@ -51,36 +58,74 @@ class RobosuiteWrapper(gym.Env):
         if mode == 'box':
             self.move_to_pos(np.array([0.1, -0.25, 1]), gripper_action=-1, render=render)
 
-        # holding the can
         if mode == 'move':
-            obs = self._get_obs()
-            can_pos = obs['can_pos']
+            # Grab the can
+            can_pos = self._get_can_pos()
             self.move_to_pos(can_pos + np.array([0, 0, 0.1]), gripper_action=-1, render=render)
             self.move_to_pos(can_pos, gripper_action=-1, render=render)
             for _ in range(4):
                 self.step(np.array([0, 0, 0, 1]))
                 if render:
                     self._env.render()
-        
-        if mode == 'place':
-            self.fast_forward(mode='move', render=render)
-            obs = self._get_obs()
-            hand_pos = obs['hand_pos']
+            
+            # Lift it off the box
+            hand_pos = self._get_hand_pos()
             raised_pos = hand_pos.copy()
             raised_pos[2] = 1
             self.move_to_pos(raised_pos, gripper_action=1, render=render)
+        
+        if mode == 'place':
+            self.fast_forward(mode='move', render=render)
+            place_boundary_pos = np.random.uniform([-0.15, 0.03, 1], [0.35, 0.03, 1.2])
+            self.move_to_pos(place_boundary_pos, gripper_action=1, render=render)
 
-    def _unpack_obs(self, obs):
-        unpacked_obs = {
-            'hand_pos': obs['robot0_eef_pos'],
-            'can_pos': obs['Can_pos'],
-            'gripper': abs(obs['robot0_gripper_qpos'][0]) * 2
-        }
-        return unpacked_obs
+    def _process_obs(self, obs):
+        hand_pos = obs['robot0_eef_pos']
+        can_pos = obs['Can_pos']
+        gripper = abs(obs['robot0_gripper_qpos'][0]) * 2
+
+        if self.sub_mdp == 'box':
+            obs = np.concatenate([hand_pos, can_pos, [gripper]])
+        elif self.sub_mdp == 'move':
+            obs = hand_pos
+        elif self.sub_mdp == 'place':
+            obs = np.concatenate([hand_pos, [gripper]])
+        else:
+            obs = np.concatenate([hand_pos, can_pos, [gripper]])
+
+        return obs
+    
+    def _clip_hand_pos(self, hand_pos):
+        if self.sub_mdp == 'box':
+            hand_pos = hand_pos.clip([-0.15, -0.5, 0.8], [0.35, 0, 1.1])
+        elif self.sub_mdp == 'move':
+            hand_pos = hand_pos.clip([-0.15, -0.5, 1], [0.35, 0.53, 1.2])
+        elif self.sub_mdp == 'place':
+            hand_pos = hand_pos.clip([-0.15, 0.03, 1], [0.35, 0.53, 1.2])
+        return hand_pos
+
+    def _advance_sub_mdp(self):
+        if self.sub_mdp == 'box':
+            if np.linalg.norm(self._get_hand_pos() - self._get_can_pos()) < 0.01 and self._get_hand_pos()[2] > 1:
+                self.sub_mdp = 'move'
+        elif self.sub_mdp == 'move':
+            if self._get_hand_pos()[1] > 0.03:
+                self.sub_mdp = 'place'
+
+    def _process_action(self, action):
+        hand_pos = self._get_hand_pos()
+        resulting_hand_pos = hand_pos + action[:3] / 10
+        cliped_hand_pos = self._clip_hand_pos(resulting_hand_pos)
+        action[:3] = ((cliped_hand_pos - hand_pos) * 10).clip(-1, 1)
+        if self.sub_mdp == 'move':
+            action = np.concatenate([action, [1]])
+        return action
 
     def step(self, action):
+        action = self._process_action(action)
         obs, reward, done, info = self._env.step(action)
-        obs = self._unpack_obs(obs)
+        self._advance_sub_mdp()
+        obs = self._process_obs(obs)
         return obs, reward, done, info
 
     def reset(self):
@@ -133,3 +178,4 @@ if __name__ == '__main__':
     env = RobosuiteWrapper()
     env.reset()
     env.fast_forward('place', render=True)
+    input()
