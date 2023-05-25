@@ -17,7 +17,7 @@ class RobosuiteWrapper(gym.Env):
             env_name="PickPlaceCan",
             robots="Panda",
             controller_configs=config,
-            has_renderer=True,
+            has_renderer=False,
             has_offscreen_renderer=False,
             ignore_done=False,
             use_camera_obs=False,
@@ -67,8 +67,8 @@ class RobosuiteWrapper(gym.Env):
             action = np.zeros(4)
             action[:3] = (goal_pos - hand_pos) * 10
             action[3] = gripper_action
-            obs, _, _, _ = self.step(action)
-            hand_pos = obs[:3]
+            obs, _, _, _ = self._env.step(action)
+            hand_pos = obs['robot0_eef_pos']
             if render:
                 self._env.render()
 
@@ -82,7 +82,7 @@ class RobosuiteWrapper(gym.Env):
             self.move_to_pos(can_pos + np.array([0, 0, 0.1]), gripper_action=-1, render=render)
             self.move_to_pos(can_pos, gripper_action=-1, render=render)
             for _ in range(4):
-                self.step(np.array([0, 0, 0, 1]))
+                self._env.step(np.array([0, 0, 0, 1]))
                 if render:
                     self._env.render()
             
