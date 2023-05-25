@@ -28,8 +28,26 @@ class RobosuiteWrapper(gym.Env):
         self._env = env
         self.sub_mdp = sub_mdp
 
-        self.action_space = gym.spaces.Box(low=-1, high=1, shape=(4,), dtype=float)
+        # self.action_space = gym.spaces.Box(low=-1, high=1, shape=(4,), dtype=float)
         # self.observation_space = gym.spaces.Box(low=-10, high=10, shape=(7,), dtype=float)
+
+    @property
+    def action_space(self):
+        if self.sub_mdp == 'move':
+            return gym.spaces.Box(low=-1, high=1, shape=(3,), dtype=float)
+        else:
+            return gym.spaces.Box(low=-1, high=1, shape=(4,), dtype=float)
+    
+    @property
+    def observation_space(self):
+        if self.sub_mdp == 'box':
+            return gym.spaces.Box(low=-10, high=10, shape=(7,), dtype=float)
+        elif self.sub_mdp == 'move':
+            return gym.spaces.Box(low=-10, high=10, shape=(3,), dtype=float)
+        elif self.sub_mdp == 'place':
+            return gym.spaces.Box(low=-10, high=10, shape=(7,), dtype=float)
+        else:
+            raise NotImplementedError
 
     def _get_obs(self):
         obs = self._env._get_observations()
@@ -141,10 +159,6 @@ class RobosuiteWrapper(gym.Env):
     def _max_episode_steps(self):
         return self.horizon
 
-    @property
-    def observation_space(self):
-        return self._observation_space
-    
     def close(self) -> None:
         self._env.close()
         return super().close()
