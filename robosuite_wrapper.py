@@ -161,7 +161,10 @@ class RobosuiteWrapper(gym.Env):
     def reset(self):
         self._env.reset()
         if self.sub_mdp is not None:
-            self.fast_forward(mode=self.sub_mdp)
+            try:
+                self.fast_forward(mode=self.sub_mdp)
+            except ValueError:
+                self.reset()
         return self._get_obs()
 
     def render(self, *args, **kwargs):
@@ -201,7 +204,7 @@ register_envs()
 
 
 if __name__ == '__main__':
-    env = RobosuiteWrapper()
+    env = RobosuiteWrapper(sub_mdp='move')
     env.reset()
-    env.fast_forward('place', render=True)
+    # env.fast_forward('place', render=True)
     input()
