@@ -128,10 +128,13 @@ class RobosuiteWrapper(gym.Env):
     def _advance_sub_mdp(self):
         if self.sub_mdp == 'box':
             if np.linalg.norm(self._get_hand_pos() - self._get_can_pos()) < 0.01 and self._get_hand_pos()[2] > 1:
-                self.sub_mdp = 'move'
+                return True
+                # self.sub_mdp = 'move'
         elif self.sub_mdp == 'move':
             if self._get_hand_pos()[1] > 0.03:
-                self.sub_mdp = 'place'
+                return True
+                # self.sub_mdp = 'place'
+        return False
 
     def _process_action(self, action):
         hand_pos = self._get_hand_pos()
@@ -145,8 +148,14 @@ class RobosuiteWrapper(gym.Env):
     def step(self, action):
         action = self._process_action(action)
         obs, reward, done, info = self._env.step(action)
-        self._advance_sub_mdp()
+        sub_mdp_changed = self._advance_sub_mdp()
         obs = self._process_obs(obs)
+        if sub_mdp_changed or reward > 0:
+            reward = 1
+            done = True
+        else:
+            reward = 0
+            done = False
         return obs, reward, done, info
 
     def reset(self):
