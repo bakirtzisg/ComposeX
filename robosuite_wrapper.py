@@ -101,13 +101,16 @@ class RobosuiteWrapper(gym.Env):
         hand_pos = obs['robot0_eef_pos']
         can_pos = obs['Can_pos']
         gripper = abs(obs['robot0_gripper_qpos'][0]) * 2
+        bin = self._env.target_bin_placements
+        bin_id = self._env.object_to_id['can']
+        goal_pos = bin[bin_id]
 
         if self.sub_mdp == 'box':
             obs = np.concatenate([hand_pos, can_pos, [gripper]])
         elif self.sub_mdp == 'move':
             obs = hand_pos
         elif self.sub_mdp == 'place':
-            obs = np.concatenate([hand_pos, [gripper]])
+            obs = np.concatenate([hand_pos, goal_pos, [gripper]])
         else:
             obs = np.concatenate([hand_pos, can_pos, [gripper]])
 
