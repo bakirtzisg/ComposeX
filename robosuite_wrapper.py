@@ -147,15 +147,38 @@ class RobosuiteWrapper(gym.Env):
 
     def step(self, action):
         action = self._process_action(action)
+
+        prev_obs = self._env._get_observations()
+        prev_hand_pos = prev_obs['robot0_eef_pos']
+        prev_can_pos = prev_obs['Can_pos']
+        prev_can_dist = np.linalg.norm(prev_hand_pos - prev_can_pos)
+        prev_goal_dist = np.linalg.norm(prev_can_pos - self._env.target_bin_placements[self._env.object_to_id['can']])
+        
         obs, reward, done, info = self._env.step(action)
-        sub_mdp_changed = self._advance_sub_mdp()
+        done = self._advance_sub_mdp()
+
+        hand_pos = obs['robot0_eef_pos']
+        can_pos = obs['Can_pos']
+        can_dist = np.linalg.norm(hand_pos - can_pos)
+        goal_dist = np.linalg.norm(can_pos - self._env.target_bin_placements[self._env.object_to_id['can']])
+
         obs = self._process_obs(obs)
-        if sub_mdp_changed or reward > 0:
-            reward = 1
+
+        if reward > 0:
             done = True
-        else:
-            reward = 0
-            done = False
+
+        if self.sub_mdp == 'box':
+            reach_reward = (prev_can_dist - can_dist).clip(0, np.inf)
+            lift_reward = (hand_pos[2] - prev_hand_pos[2]).clip(0, np.inf)
+            reward = reach_reward + lift_reward
+        elif self.sub_mdp == 'move':
+            reward = (hand_pos[1] - prev_hand_pos[1]).clip(0, np.inf)
+        elif self.sub_mdp == 'place':
+            reward = (prev_goal_dist - goal_dist).clip(0, np.inf)
+
+        if done:
+            reward += 1
+
         return obs, reward, done, info
 
     def reset(self):
