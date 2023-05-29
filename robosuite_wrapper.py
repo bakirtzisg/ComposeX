@@ -34,18 +34,18 @@ class RobosuiteWrapper(gym.Env):
     @property
     def action_space(self):
         if self.sub_mdp == 'move':
-            return gym.spaces.Box(low=-1, high=1, shape=(3,), dtype=float)
+            return gym.spaces.Box(low=-1, high=1, shape=(3,), dtype=np.float32)
         else:
-            return gym.spaces.Box(low=-1, high=1, shape=(4,), dtype=float)
+            return gym.spaces.Box(low=-1, high=1, shape=(4,), dtype=np.float32)
     
     @property
     def observation_space(self):
         if self.sub_mdp == 'box':
-            return gym.spaces.Box(low=-10, high=10, shape=(7,), dtype=float)
+            return gym.spaces.Box(low=-10, high=10, shape=(7,), dtype=np.float32)
         elif self.sub_mdp == 'move':
-            return gym.spaces.Box(low=-10, high=10, shape=(3,), dtype=float)
+            return gym.spaces.Box(low=-10, high=10, shape=(3,), dtype=np.float32)
         elif self.sub_mdp == 'place':
-            return gym.spaces.Box(low=-10, high=10, shape=(7,), dtype=float)
+            return gym.spaces.Box(low=-10, high=10, shape=(7,), dtype=np.float32)
         else:
             raise NotImplementedError
 
