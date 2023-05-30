@@ -6,8 +6,6 @@ from gym.envs.registration import register
 
 class RobosuiteWrapper(gym.Env):
     def __init__(self, horizon=100, sub_mdp=None):
-        self.camera_names = ['frontview', 'robot0_eye_in_hand']
-
         config = load_controller_config(default_controller='OSC_POSITION')
 
         # PickAndPlace env
@@ -17,7 +15,7 @@ class RobosuiteWrapper(gym.Env):
             env_name="PickPlaceCan",
             robots="Panda",
             controller_configs=config,
-            has_renderer=False,
+            has_renderer=True,
             has_offscreen_renderer=False,
             ignore_done=False,
             use_camera_obs=False,
@@ -147,18 +145,12 @@ class RobosuiteWrapper(gym.Env):
 
     def step(self, action):
         action = self._process_action(action)
-
-        prev_obs = self._env._get_observations()
-        prev_hand_pos = prev_obs['robot0_eef_pos']
-        prev_can_pos = prev_obs['Can_pos']
-        prev_can_dist = np.linalg.norm(prev_hand_pos - prev_can_pos)
-        prev_goal_dist = np.linalg.norm(prev_can_pos - self._env.target_bin_placements[self._env.object_to_id['can']])
         
         obs, reward, done, info = self._env.step(action)
         done = self._advance_sub_mdp()
 
-        hand_pos = obs['robot0_eef_pos']
-        can_pos = obs['Can_pos']
+        hand_pos = obs['robot0_eef_pos'].copy()
+        can_pos = obs['Can_pos'].copy()
         can_dist = np.linalg.norm(hand_pos - can_pos)
         goal_dist = np.linalg.norm(can_pos - self._env.target_bin_placements[self._env.object_to_id['can']])
 
@@ -168,16 +160,14 @@ class RobosuiteWrapper(gym.Env):
             done = True
 
         if self.sub_mdp == 'box':
-            reach_reward = (prev_can_dist - can_dist).clip(0, np.inf)
-            lift_reward = (hand_pos[2] - prev_hand_pos[2]).clip(0, np.inf)
-            reward = reach_reward + lift_reward
+            reward = -can_dist + can_pos[2]
         elif self.sub_mdp == 'move':
-            reward = (hand_pos[1] - prev_hand_pos[1]).clip(0, np.inf)
+            reward = hand_pos[1]
         elif self.sub_mdp == 'place':
-            reward = (prev_goal_dist - goal_dist).clip(0, np.inf)
+            reward = -goal_dist
 
         if done:
-            reward += 1
+            reward += 100
 
         return obs, reward, done, info
 
@@ -191,7 +181,7 @@ class RobosuiteWrapper(gym.Env):
         return self._get_obs()
 
     def render(self, *args, **kwargs):
-        self._env.render(*args, **kwargs)
+        self._env.render()
 
     @property
     def _max_episode_steps(self):
