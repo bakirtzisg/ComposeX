@@ -43,7 +43,7 @@ class RobosuiteWrapper(gym.Env):
         elif self.sub_mdp == 'move':
             return gym.spaces.Box(low=-10, high=10, shape=(3,), dtype=np.float32)
         elif self.sub_mdp == 'place':
-            return gym.spaces.Box(low=-10, high=10, shape=(7,), dtype=np.float32)
+            return gym.spaces.Box(low=-10, high=10, shape=(10,), dtype=np.float32)
         else:
             raise NotImplementedError
 
@@ -108,7 +108,7 @@ class RobosuiteWrapper(gym.Env):
         elif self.sub_mdp == 'move':
             obs = hand_pos
         elif self.sub_mdp == 'place':
-            obs = np.concatenate([hand_pos, goal_pos, [gripper]])
+            obs = np.concatenate([hand_pos, can_pos, goal_pos, [gripper]])
         else:
             obs = np.concatenate([hand_pos, can_pos, [gripper]])
 
@@ -160,7 +160,8 @@ class RobosuiteWrapper(gym.Env):
             done = True
 
         if self.sub_mdp == 'box':
-            reward = -can_dist + can_pos[2]
+            # reward = -can_dist + can_pos[2] - 1
+            reward = -1
         elif self.sub_mdp == 'move':
             reward = hand_pos[1]
         elif self.sub_mdp == 'place':

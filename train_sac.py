@@ -41,10 +41,10 @@ def collect_expert_data(num_episodes=10):
 
             if env_name == 'Place':
                 if phase == 0:
-                    if np.linalg.norm(obs[3:6] + np.array([0, 0, 0.2]) - obs[:3]) < 0.1:
+                    if np.linalg.norm(obs[6:9] + np.array([0, 0, 0.2]) - obs[:3]) < 0.1:
                         phase = 1
                     action = np.ones(4, dtype=np.float32)
-                    action[:3] = ((obs[3:6] + np.array([0, 0, 0.1]) - obs[:3]) * 10).clip(-1, 1)
+                    action[:3] = ((obs[6:9] + np.array([0, 0, 0.1]) - obs[:3]) * 10).clip(-1, 1)
                 if phase == 1:
                     action = np.zeros(4, dtype=np.float32)
                     action[3] = -1
@@ -55,6 +55,7 @@ def collect_expert_data(num_episodes=10):
             if done:
                 print('Final step reward:', reward)
 
-collect_expert_data(100)
+# if env_name in ['Box', 'Place']:
+    # collect_expert_data(10)
 model.learn(total_timesteps=50000, log_interval=4)
 model.save(f'sac_{env_name}')
