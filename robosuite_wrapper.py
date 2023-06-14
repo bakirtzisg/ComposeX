@@ -26,9 +26,6 @@ class RobosuiteWrapper(gym.Env):
         self._env = env
         self.sub_mdp = sub_mdp
 
-        # self.action_space = gym.spaces.Box(low=-1, high=1, shape=(4,), dtype=float)
-        # self.observation_space = gym.spaces.Box(low=-10, high=10, shape=(7,), dtype=float)
-
     @property
     def action_space(self):
         if self.sub_mdp == 'move':
@@ -78,7 +75,7 @@ class RobosuiteWrapper(gym.Env):
             # Grab the can
             can_pos = self._get_can_pos()
             self.move_to_pos(can_pos + np.array([0, 0, 0.1]), gripper_action=-1, render=render)
-            self.move_to_pos(can_pos, gripper_action=-1, render=render)
+            self.move_to_pos(can_pos + np.array([0, 0, 0.01]), gripper_action=-1, render=render)
             for _ in range(4):
                 self._env.step(np.array([0, 0, 0, 1]))
                 if render:
@@ -125,7 +122,7 @@ class RobosuiteWrapper(gym.Env):
 
     def _advance_sub_mdp(self):
         if self.sub_mdp == 'box':
-            if np.linalg.norm(self._get_hand_pos() - self._get_can_pos()) < 0.01 and self._get_hand_pos()[2] > 1:
+            if self._get_can_pos()[2] > 1:
                 return True
                 # self.sub_mdp = 'move'
         elif self.sub_mdp == 'move':
@@ -151,7 +148,7 @@ class RobosuiteWrapper(gym.Env):
 
         hand_pos = obs['robot0_eef_pos'].copy()
         can_pos = obs['Can_pos'].copy()
-        can_dist = np.linalg.norm(hand_pos - can_pos)
+        can_dist = np.linalg.norm(can_pos + np.array([0, 0, 0.005]) - hand_pos)
         goal_dist = np.linalg.norm(can_pos - self._env.target_bin_placements[self._env.object_to_id['can']])
 
         obs = self._process_obs(obs)
@@ -160,8 +157,9 @@ class RobosuiteWrapper(gym.Env):
             done = True
 
         if self.sub_mdp == 'box':
-            # reward = -can_dist + can_pos[2] - 1
-            reward = -1
+            reward = -can_dist + max(can_pos[2] - 0.86, 0) - 1
+            # reward = -can_dist
+            # reward = -1
         elif self.sub_mdp == 'move':
             reward = hand_pos[1]
         elif self.sub_mdp == 'place':
@@ -211,6 +209,12 @@ def register_envs():
         entry_point=RobosuiteWrapper,
         max_episode_steps=100,
         kwargs={'sub_mdp': 'place'}
+    )
+    register(
+        id="Can-v1",
+        entry_point=RobosuiteWrapper,
+        max_episode_steps=100,
+        kwargs={'sub_mdp': 'box'}
     )
 
 

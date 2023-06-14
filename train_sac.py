@@ -3,12 +3,16 @@ import robosuite_wrapper
 import numpy as np
 from stable_baselines3 import SAC
 
-env_name = 'Place'  # 'Move' or 'Place'
+env_name = 'Box'  # 'Move' or 'Place'
 
 print(env_name)
 env = gym.make(f'{env_name}-v1')
 
-model = SAC('MlpPolicy', env, verbose=1)
+# model = SAC('MlpPolicy', env, verbose=1,
+#             learning_rate=0.01)
+model = SAC.load(f'sac_{env_name}_10000', env=env,
+                 learning_rate=0.01,
+                 verbose=1)
 
 
 def collect_expert_data(num_episodes=10):
@@ -25,10 +29,10 @@ def collect_expert_data(num_episodes=10):
                     action = -np.ones(4, dtype=np.float32)
                     action[:3] = ((obs[3:6] + np.array([0, 0, 0.1]) - obs[:3]) * 10).clip(-1, 1)
                 if phase == 1:
-                    if np.linalg.norm(obs[3:6] - obs[:3]) < 0.01:
+                    if np.linalg.norm(obs[3:6] + np.array([0, 0, 0.005]) - obs[:3]) < 0.01:
                         phase = 2
                     action = -np.ones(4, dtype=np.float32)
-                    action[:3] = ((obs[3:6] - obs[:3]) * 10).clip(-1, 1)
+                    action[:3] = ((obs[3:6] + np.array([0, 0, 0.005]) - obs[:3]) * 10).clip(-1, 1)
                 if phase == 2:
                     if obs[6] < 0.05:
                         phase = 3
@@ -56,6 +60,6 @@ def collect_expert_data(num_episodes=10):
                 print('Final step reward:', reward)
 
 # if env_name in ['Box', 'Place']:
-    # collect_expert_data(10)
-model.learn(total_timesteps=50000, log_interval=4)
-model.save(f'sac_{env_name}')
+#     collect_expert_data(10)
+model.learn(total_timesteps=40000, log_interval=4)
+model.save(f'sac_{env_name}_50000')
