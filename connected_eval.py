@@ -1,6 +1,7 @@
 import gym
 import robosuite_wrapper
 from stable_baselines3 import SAC
+import time
 
 env = gym.make(f'Can-v1')
 
@@ -13,9 +14,13 @@ while True:
     action, _states = model.predict(obs, deterministic=True)
     obs, reward, done, info = env.step(action)
     episode_reward += reward
+    time.sleep(0.025)
+
     env.render()
     if done:
         obs = env.reset()
+        current_sub_mdp = 'reach_above'
+        model = SAC.load('sac_ReachAbove_500000')
         print('Episode reward:', episode_reward)
         episode_reward = 0
     if env.unwrapped.sub_mdp != current_sub_mdp:

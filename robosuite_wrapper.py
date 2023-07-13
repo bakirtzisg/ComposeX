@@ -221,6 +221,8 @@ class RobosuiteWrapper(gym.Env):
 
     def reset(self):
         self._env.reset()
+        if not self.set_done_sub_mdp:
+            self.sub_mdp = 'reach_above'
         if self.sub_mdp is not None:
             try:
                 self.fast_forward(mode=self.sub_mdp)
