@@ -5,7 +5,7 @@ from robosuite import load_controller_config
 from gym.envs.registration import register
 
 class RobosuiteWrapper(gym.Env):
-    def __init__(self, horizon=100, sub_mdp=None):
+    def __init__(self, horizon=100, set_sub_mdp=None):
         config = load_controller_config(default_controller='OSC_POSITION')
 
         # PickAndPlace env
@@ -24,19 +24,30 @@ class RobosuiteWrapper(gym.Env):
         )
         self.horizon = horizon
         self._env = env
-        self.sub_mdp = sub_mdp
+        if set_sub_mdp is not None:
+            self.sub_mdp = set_sub_mdp
+            self.set_done_sub_mdp = True
+        else:
+            self.sub_mdp = 'reach_above'
+            self.set_done_sub_mdp = False
+
+        self.init_can_pos = None
 
     @property
     def action_space(self):
-        if self.sub_mdp == 'move':
+        if self.sub_mdp in ['reach_above', 'move']:
             return gym.spaces.Box(low=-1, high=1, shape=(3,), dtype=np.float32)
+        elif self.sub_mdp == 'lift':
+            return gym.spaces.Box(low=-1, high=1, shape=(2,), dtype=np.float32)
         else:
             return gym.spaces.Box(low=-1, high=1, shape=(4,), dtype=np.float32)
     
     @property
     def observation_space(self):
-        if self.sub_mdp == 'box':
+        if self.sub_mdp == 'reach_above':
             return gym.spaces.Box(low=-10, high=10, shape=(7,), dtype=np.float32)
+        elif self.sub_mdp == 'lift':
+            return gym.spaces.Box(low=-10, high=10, shape=(3,), dtype=np.float32)
         elif self.sub_mdp == 'move':
             return gym.spaces.Box(low=-10, high=10, shape=(3,), dtype=np.float32)
         elif self.sub_mdp == 'place':
@@ -67,9 +78,13 @@ class RobosuiteWrapper(gym.Env):
             if render:
                 self._env.render()
 
-    def fast_forward(self, mode='box', render=False):
-        if mode == 'box':
+    def fast_forward(self, mode='reach_above', render=False):
+        if mode == 'reach_above':
             self.move_to_pos(np.array([0.1, -0.25, 1]), gripper_action=-1, render=render)
+        
+        if mode == 'lift':
+            can_pos = self._get_can_pos()
+            self.move_to_pos(can_pos + np.array([0, 0, 0.1]))
 
         if mode == 'move':
             # Grab the can
@@ -100,8 +115,10 @@ class RobosuiteWrapper(gym.Env):
         bin_id = self._env.object_to_id['can']
         goal_pos = bin[bin_id]
 
-        if self.sub_mdp == 'box':
+        if self.sub_mdp == 'reach_above':
             obs = np.concatenate([hand_pos, can_pos, [gripper]])
+        elif self.sub_mdp == 'lift':
+            obs = np.concatenate([hand_pos[2:3], can_pos[2:3], [gripper]])
         elif self.sub_mdp == 'move':
             obs = hand_pos
         elif self.sub_mdp == 'place':
@@ -112,7 +129,7 @@ class RobosuiteWrapper(gym.Env):
         return obs
     
     def _clip_hand_pos(self, hand_pos):
-        if self.sub_mdp == 'box':
+        if self.sub_mdp == 'reach_above':
             hand_pos = hand_pos.clip([-0.15, -0.5, 0.8], [0.35, 0, 1.1])
         elif self.sub_mdp == 'move':
             hand_pos = hand_pos.clip([-0.15, -0.5, 1], [0.35, 0.53, 1.2])
@@ -121,22 +138,36 @@ class RobosuiteWrapper(gym.Env):
         return hand_pos
 
     def _advance_sub_mdp(self):
-        if self.sub_mdp == 'box':
+        if self.sub_mdp == 'reach_above':
+            hand_pos = self._get_hand_pos()
+            can_pos = self._get_can_pos()
+            above_dist = np.linalg.norm(can_pos + np.array([0, 0, 0.1]) - hand_pos)
+            if above_dist < 0.01:
+                self.sub_mdp = 'lift'
+                if self.set_done_sub_mdp:
+                    return True
+        if self.sub_mdp == 'lift':
             if self._get_can_pos()[2] > 1:
-                return True
-                # self.sub_mdp = 'move'
+                self.sub_mdp = 'move'
+                if self.set_done_sub_mdp:
+                    return True
         elif self.sub_mdp == 'move':
             if self._get_hand_pos()[1] > 0.03:
-                return True
-                # self.sub_mdp = 'place'
+                self.sub_mdp = 'place'
+                if self.set_done_sub_mdp:
+                    return True
         return False
 
     def _process_action(self, action):
+        if self.sub_mdp == 'lift':
+            action = np.concatenate([[0, 0], action])
         hand_pos = self._get_hand_pos()
         resulting_hand_pos = hand_pos + action[:3] / 10
         cliped_hand_pos = self._clip_hand_pos(resulting_hand_pos)
         action[:3] = ((cliped_hand_pos - hand_pos) * 10).clip(-1, 1)
-        if self.sub_mdp == 'move':
+        if self.sub_mdp == 'reach_above':
+            action = np.concatenate([action, [-1]])
+        elif self.sub_mdp == 'move':
             action = np.concatenate([action, [1]])
         return action
 
@@ -156,17 +187,35 @@ class RobosuiteWrapper(gym.Env):
         if reward > 0:
             done = True
 
-        if self.sub_mdp == 'box':
-            reward = -can_dist + max(can_pos[2] - 0.86, 0) - 1
-            # reward = -can_dist
-            # reward = -1
+        if self.sub_mdp == 'reach_above':
+            # reward = -can_dist + max(can_pos[2] - 0.86, 0) - 1
+            above_dist = np.linalg.norm(can_pos + np.array([0, 0, 0.1]) - hand_pos)
+            reward = -above_dist * np.exp(above_dist)
+
+            can_move = np.linalg.norm(can_pos - self.init_can_pos)
+            if can_move > 0.01:
+                reward = -100
+                done = True
+            elif above_dist < 0.01:
+                reward = 100
+                done = True
+            
+            # r_reach, r_grasp, r_lift, r_hover = self._env.staged_rewards()
+            # if r_grasp > 0:
+            #     done = True
+            # reward = r_reach
+        elif self.sub_mdp == 'lift':
+            reward = -can_dist * np.exp(can_dist)
+            if done:
+                reward = 100
+
         elif self.sub_mdp == 'move':
             reward = hand_pos[1]
         elif self.sub_mdp == 'place':
             reward = -goal_dist
 
-        if done:
-            reward += 100
+        # if done:
+        #     reward = 100
 
         return obs, reward, done, info
 
@@ -177,6 +226,8 @@ class RobosuiteWrapper(gym.Env):
                 self.fast_forward(mode=self.sub_mdp)
             except ValueError:
                 self.reset()
+        if self.sub_mdp == 'reach_above':
+            self.init_can_pos = self._get_can_pos()
         return self._get_obs()
 
     def render(self, *args, **kwargs):
@@ -193,28 +244,34 @@ class RobosuiteWrapper(gym.Env):
 
 def register_envs():
     register(
-        id="Box-v1",
+        id="ReachAbove-v1",
         entry_point=RobosuiteWrapper,
         max_episode_steps=100,
-        kwargs={'sub_mdp': 'box'}
+        kwargs={'set_sub_mdp': 'reach_above'}
+    )
+    register(
+        id="Lift-v1",
+        entry_point=RobosuiteWrapper,
+        max_episode_steps=100,
+        kwargs={'set_sub_mdp': 'lift'}
     )
     register(
         id="Move-v1",
         entry_point=RobosuiteWrapper,
         max_episode_steps=100,
-        kwargs={'sub_mdp': 'move'}
+        kwargs={'set_sub_mdp': 'move'}
     )
     register(
         id="Place-v1",
         entry_point=RobosuiteWrapper,
         max_episode_steps=100,
-        kwargs={'sub_mdp': 'place'}
+        kwargs={'set_sub_mdp': 'place'}
     )
     register(
         id="Can-v1",
         entry_point=RobosuiteWrapper,
         max_episode_steps=100,
-        kwargs={'sub_mdp': 'box'}
+        kwargs={'set_sub_mdp': None}
     )
 
 
