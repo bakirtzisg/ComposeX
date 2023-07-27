@@ -12,19 +12,36 @@ sac_agents = {}
 for task in env.unwrapped.tasks:
     env.unwrapped.current_task = task
     sac_agents[task] = SAC('MlpPolicy', env, verbose=1,
-                           learning_rate=0.01,
+                           gamma=0.96,
                            tensorboard_log=f'./tb/{task}/')
-    total_timesteps, callback = sac_agents[task]._setup_learn(
-        total_timesteps=TOTAL_TRAINING_STEPS,
-        callback=None,
-        reset_num_timesteps=False,
-        tb_log_name=f'sac-{task}',
-        progress_bar=False,
-    )
+    
+setup_done = {}
+for task in env.unwrapped.tasks:
+    setup_done[task] = False
+
+total_timesteps, callback = sac_agents['reach_above']._setup_learn(
+    total_timesteps=TOTAL_TRAINING_STEPS,
+    callback=None,
+    reset_num_timesteps=True,
+    tb_log_name='sac',
+    progress_bar=False,
+)
+setup_done['reach_above'] = True
 
 for step in range(TOTAL_TRAINING_STEPS):
     task = env.unwrapped.current_task
     task_sac = sac_agents[task]
+
+    if not setup_done[task]:
+        env.unwrapped._setup_skip_reset()
+        total_timesteps, callback = task_sac._setup_learn(
+            total_timesteps=TOTAL_TRAINING_STEPS,
+            callback=None,
+            reset_num_timesteps=True,
+            tb_log_name='sac',
+            progress_bar=False,
+        )
+        setup_done[task] = True
 
     task_sac.policy.set_training_mode(False)
 
@@ -33,12 +50,10 @@ for step in range(TOTAL_TRAINING_STEPS):
 
     rewards[0] = infos[0]['task_reward']
     dones[0] = infos[0]['task_terminated'] or dones[0]
-    if 'previous_task_obs' in infos[0]:
+    if 'current_task_obs' in infos[0]:
         new_task = infos[0]['current_task']
         new_task_sac = sac_agents[new_task]
-        new_task_sac._last_obs = new_obs[0]
-
-        new_obs[0] = infos[0]['previous_task_obs']
+        new_task_sac._last_obs = infos[0]['current_task_obs']
 
     task_sac.num_timesteps += task_sac.env.num_envs
 

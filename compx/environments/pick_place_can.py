@@ -11,7 +11,7 @@ class CompPickPlaceCanEnv(gym.Env):
             env_name="PickPlaceCan",
             robots="Panda",
             controller_configs=config,
-            has_renderer=False,
+            has_renderer=True,
             has_offscreen_renderer=False,
             ignore_done=False,
             use_camera_obs=False,
@@ -35,6 +35,8 @@ class CompPickPlaceCanEnv(gym.Env):
         self.current_task = 'reach_above'
         self.init_can_pos = None
         self.reward_criteria = None
+        self.setup_skip_reset_once = False
+
 
     @property
     def action_space(self):
@@ -80,27 +82,6 @@ class CompPickPlaceCanEnv(gym.Env):
         elif self.current_task == 'place':
             hand_pos = hand_pos.clip([-0.15, 0.03, 1], [0.35, 0.53, 1.2])
         return hand_pos
-
-    def _advance_current_task(self):
-        if self.current_task == 'reach_above':
-            hand_pos = self._get_hand_pos()
-            can_pos = self._get_can_pos()
-            above_dist = np.linalg.norm(can_pos + np.array([0, 0, 0.1]) - hand_pos)
-            if above_dist < 0.01:
-                self.current_task = 'lift'
-                if self.set_done_current_task:
-                    return True
-        if self.current_task == 'lift':
-            if self._get_can_pos()[2] > 1:
-                self.current_task = 'move'
-                if self.set_done_current_task:
-                    return True
-        elif self.current_task == 'move':
-            if self._get_hand_pos()[1] > 0.03:
-                self.current_task = 'place'
-                if self.set_done_current_task:
-                    return True
-        return False
 
     def _process_action(self, action):
         if self.current_task == 'lift':
@@ -158,10 +139,12 @@ class CompPickPlaceCanEnv(gym.Env):
             task_reward = self.reward_criteria['goal_dist'] - new_reward_criteria['goal_dist']
             # task_reward = -goal_dist * np.exp(goal_dist)
 
+        # task_reward = abs(task_reward)
+
         if task_completed:
             task_reward = 100
-        elif task_failed:
-            task_reward = -100
+        # elif task_failed:
+        #     task_reward = -100
 
         self.reward_criteria = new_reward_criteria
 
@@ -178,24 +161,34 @@ class CompPickPlaceCanEnv(gym.Env):
         if reward > 0:
             terminated = True
             task_reward = 100
+        if task_failed:
+            terminated = True
 
         info['task_reward'] = task_reward
         info['task_terminated'] = task_completed or task_failed or terminated
 
         if task_completed:
-            info['previous_task_obs'] = self._get_obs()
-            self.task = self.tasks[self.tasks.index(self.task) + 1]
-            info['current_task'] = self.task
-
-        obs = self._get_obs()
+            previous_task_obs = self._get_obs()
+            self.current_task = self.tasks[self.tasks.index(self.current_task) + 1]
+            info['current_task'] = self.current_task
+            info['current_task_obs'] = self._get_obs()
+            obs = previous_task_obs
+        else:
+            obs = self._get_obs()
         return obs, task_reward, terminated, truncated, info
 
+    def _setup_skip_reset(self):
+        self.setup_skip_reset_once = True
+
     def reset(self, seed=None, options=None):
-        observation = self._env.reset()
-        self.task = 'reach_above'
-        self.init_can_pos = self._get_can_pos()
-        self.reward_criteria = self._compute_reward_criteria(observation)
-        return self._get_obs(), {'current_task': self.task}
+        if self.setup_skip_reset_once:
+            self.setup_skip_reset_once = False
+        else:
+            observation = self._env.reset()
+            self.current_task = 'reach_above'
+            self.init_can_pos = self._get_can_pos()
+            self.reward_criteria = self._compute_reward_criteria(observation)
+        return self._get_obs(), {'current_task': self.current_task}
 
     def render(self, *args, **kwargs):
         self._env.render()
