@@ -1,22 +1,25 @@
-import gym
-import robosuite_wrapper
-
+import gymnasium as gym 
+import compx
+import numpy as np
 from stable_baselines3 import SAC
 
-env_name = 'Lift'  # 'Move' or 'Place'
 
-env = gym.make(f'{env_name}-v1')
+TOTAL_TRAINING_STEPS = 1000000
+LOG_INTERVAL = 4
 
-model = SAC.load(f'sac_{env_name}_500000')
+env = gym.make('CompPickPlaceCan-v1')
+sac_agents = {}
+for task in env.unwrapped.tasks:
+    sac_agents[task] = SAC.load(f'sac_{task}')
 
-obs = env.reset()
-episode_reward = 0
+done = True
+
 while True:
-    action, _states = model.predict(obs, deterministic=True)
-    obs, reward, done, info = env.step(action)
-    episode_reward += reward
-    env.render()
     if done:
-        obs = env.reset()
-        print('Episode reward:', episode_reward)
-        episode_reward = 0
+        obs, info = env.reset()
+    obs = env.unwrapped._get_obs()
+    current_task = env.unwrapped.current_task
+    action, _states = sac_agents[current_task].predict(obs, deterministic=True)
+    obs, reward, terminated, truncated, info = env.step(action)
+    done = terminated or truncated
+    env.render()
