@@ -14,7 +14,8 @@ for task in env.unwrapped.tasks:
     sac_agents[task] = SAC('MlpPolicy', env, verbose=1,
                            gamma=0.96,
                            tensorboard_log=f'./tb/{task}/')
-    
+env.unwrapped.current_task = env.unwrapped.tasks[0]
+
 setup_done = {}
 for task in env.unwrapped.tasks:
     setup_done[task] = False
@@ -45,15 +46,14 @@ for step in range(TOTAL_TRAINING_STEPS):
 
     task_sac.policy.set_training_mode(False)
 
+    if env.unwrapped.fresh_reset:
+        task_sac._last_obs = env.unwrapped._get_obs()[None]
     actions, buffer_actions = task_sac._sample_action(task_sac.learning_starts, task_sac.action_noise, task_sac.env.num_envs)
+
     new_obs, rewards, dones, infos = task_sac.env.step(actions)
 
     rewards[0] = infos[0]['task_reward']
     dones[0] = infos[0]['task_terminated'] or dones[0]
-    if 'current_task_obs' in infos[0]:
-        new_task = infos[0]['current_task']
-        new_task_sac = sac_agents[new_task]
-        new_task_sac._last_obs = infos[0]['current_task_obs']
 
     task_sac.num_timesteps += task_sac.env.num_envs
 

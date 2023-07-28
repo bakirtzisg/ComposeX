@@ -21,7 +21,7 @@ class CompPickPlaceCanEnv(gym.Env):
         self.tasks = ['reach_above', 'lift', 'move', 'place']
         self.action_spaces = {
             'reach_above': gym.spaces.Box(low=-1, high=1, shape=(3,), dtype=np.float32),
-            'lift': gym.spaces.Box(low=-1, high=1, shape=(3,), dtype=np.float32),
+            'lift': gym.spaces.Box(low=-1, high=1, shape=(2,), dtype=np.float32),
             'move': gym.spaces.Box(low=-1, high=1, shape=(3,), dtype=np.float32),
             'place': gym.spaces.Box(low=-1, high=1, shape=(4,), dtype=np.float32)
         }
@@ -36,7 +36,7 @@ class CompPickPlaceCanEnv(gym.Env):
         self.init_can_pos = None
         self.reward_criteria = None
         self.setup_skip_reset_once = False
-
+        self.fresh_reset = False
 
     @property
     def action_space(self):
@@ -109,7 +109,8 @@ class CompPickPlaceCanEnv(gym.Env):
             'grasp_dist': grasp_dist,
             'move_dist': move_dist,
             'goal_dist': goal_dist,
-            'can_displacement': can_displacement
+            'can_displacement': can_displacement,
+            'can_height': can_pos[2]
         }
         return criteria
 
@@ -127,6 +128,7 @@ class CompPickPlaceCanEnv(gym.Env):
                 task_completed = True
         elif self.current_task == 'lift':
             task_reward = self.reward_criteria['grasp_dist'] - new_reward_criteria['grasp_dist']
+            task_reward += new_reward_criteria['can_height'] - self.reward_criteria['can_height']
             # task_reward = -grasp_dist * np.exp(grasp_dist)
             if observation['Can_pos'][2] > 1:
                 task_completed = True
@@ -142,7 +144,7 @@ class CompPickPlaceCanEnv(gym.Env):
         # task_reward = abs(task_reward)
 
         if task_completed:
-            task_reward = 100
+            task_reward = 10
         # elif task_failed:
         #     task_reward = -100
 
@@ -151,6 +153,7 @@ class CompPickPlaceCanEnv(gym.Env):
         return task_reward, task_completed, task_failed
 
     def step(self, action):
+        self.fresh_reset = False
         action = self._process_action(action)
         observation, reward, done, info = self._env.step(action)
         task_reward, task_completed, task_failed = self._evaluate_task(observation)
@@ -160,7 +163,7 @@ class CompPickPlaceCanEnv(gym.Env):
         # The entire task is completed if the can is placed in the bin.
         if reward > 0:
             terminated = True
-            task_reward = 100
+            task_reward = 10
         if task_failed:
             terminated = True
 
@@ -173,6 +176,7 @@ class CompPickPlaceCanEnv(gym.Env):
             info['current_task'] = self.current_task
             info['current_task_obs'] = self._get_obs()
             obs = previous_task_obs
+            self.fresh_reset = True
         else:
             obs = self._get_obs()
         return obs, task_reward, terminated, truncated, info
@@ -183,12 +187,20 @@ class CompPickPlaceCanEnv(gym.Env):
     def reset(self, seed=None, options=None):
         if self.setup_skip_reset_once:
             self.setup_skip_reset_once = False
+            obs = self._get_obs()
         else:
+            if self.fresh_reset:
+                print(f'Called reset right after task switch to {self.current_task}.')
+                if self.current_task != 'reach_above':
+                    self.current_task = self.tasks[self.tasks.index(self.current_task) - 1]
             observation = self._env.reset()
+            obs = self._get_obs()
             self.current_task = 'reach_above'
             self.init_can_pos = self._get_can_pos()
             self.reward_criteria = self._compute_reward_criteria(observation)
-        return self._get_obs(), {'current_task': self.current_task}
+        self.fresh_reset = True
+        return obs, {'current_task': self.current_task,
+                     'current_task_obs': self._get_obs()}
 
     def render(self, *args, **kwargs):
         self._env.render()
