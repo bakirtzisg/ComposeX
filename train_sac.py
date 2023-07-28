@@ -1,6 +1,7 @@
 import gymnasium as gym 
 import compx
 import numpy as np
+import time
 from stable_baselines3 import SAC
 
 
@@ -48,15 +49,37 @@ for step in range(TOTAL_TRAINING_STEPS):
 
     if env.unwrapped.fresh_reset:
         task_sac._last_obs = env.unwrapped._get_obs()[None]
+
+        # Manully reset the Montor environment
+        task_sac.env.envs[0].rewards = []
+
     actions, buffer_actions = task_sac._sample_action(task_sac.learning_starts, task_sac.action_noise, task_sac.env.num_envs)
 
     new_obs, rewards, dones, infos = task_sac.env.step(actions)
+
+    already_logged = dones[0]
 
     rewards[0] = infos[0]['task_reward']
     dones[0] = infos[0]['task_terminated'] or dones[0]
 
     task_sac.num_timesteps += task_sac.env.num_envs
 
+    # Log rollout info in the Monitor environment
+    if dones[0] and not already_logged:
+        monitor_env = task_sac.env.envs[0]
+        if not monitor_env.needs_reset:
+            ep_rew = sum(monitor_env.rewards)
+            ep_len = len(monitor_env.rewards)
+            ep_info = {"r": round(ep_rew, 6), "l": ep_len, "t": round(time.time() - monitor_env.t_start, 6)}
+            for key in monitor_env.info_keywords:
+                ep_info[key] = infos[0][key]
+            monitor_env.episode_returns.append(ep_rew)
+            monitor_env.episode_lengths.append(ep_len)
+            monitor_env.episode_times.append(time.time() - monitor_env.t_start)
+            ep_info.update(monitor_env.current_reset_info)
+            if monitor_env.results_writer:
+                monitor_env.results_writer.write_row(ep_info)
+            infos[0]["episode"] = ep_info
     # Retrieve reward and episode length if using Monitor wrapper
     task_sac._update_info_buffer(infos, dones)
 
@@ -74,19 +97,7 @@ for step in range(TOTAL_TRAINING_STEPS):
                 task_sac._dump_logs()
 
     task_sac.train(batch_size=task_sac.batch_size, gradient_steps=1)
+    task_sac.logger.record("train/global_step", step)
 
 for task in env.unwrapped.tasks:
     sac_agents[task].save(f'sac_{task}')
-
-
-# model = SAC('MlpPolicy', env, verbose=1,
-#             learning_rate=0.001, tensorboard_log=f"./tb/{env_name}/")
-# model = SAC.load(f'sac_{env_name}_50000', env=env,
-#                  learning_rate=0.001,
-#                  verbose=1)
-
-
-# if env_name in ['Box', 'Place', 'Lift']:
-#     collect_expert_data(10)
-# model.learn(total_timesteps=500000, log_interval=4)
-# model.save(f'sac_{env_name}_500000')
