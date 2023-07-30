@@ -7,6 +7,8 @@ from stable_baselines3 import SAC
 
 TOTAL_TRAINING_STEPS = 1000000
 LOG_INTERVAL = 4
+EVAL_INTERVAL = 2000
+NUM_EVAL_EPISODES = 20
 
 env = gym.make('CompPickPlaceCan-v1')
 sac_agents = {}
@@ -21,14 +23,46 @@ setup_done = {}
 for task in env.unwrapped.tasks:
     setup_done[task] = False
 
-total_timesteps, callback = sac_agents['reach_above']._setup_learn(
+eval_env = gym.make('CompPickPlaceCan-v1')
+def evaluate():
+    successes = np.zeros(NUM_EVAL_EPISODES, dtype=bool)
+    episode_rewards = np.zeros(NUM_EVAL_EPISODES)
+    episode_lengths = np.zeros(NUM_EVAL_EPISODES)
+    for i in range(NUM_EVAL_EPISODES):
+        obs, info = eval_env.reset()
+        done = False
+        length = 0
+        while not done:
+            obs = env.unwrapped._get_obs()
+            current_task = env.unwrapped.current_task
+            action, _states = sac_agents[current_task].predict(obs, deterministic=True)
+            obs, reward, terminated, truncated, info = eval_env.step(action)
+            done = terminated or truncated
+            episode_rewards[i] += info['task_reward']
+            length += 1
+        if terminated:
+            successes[i] = True
+        episode_lengths[i] = length
+    return successes, episode_rewards, episode_lengths
+eval_results = {}
+
+total_timesteps, callback = sac_agents['reach']._setup_learn(
     total_timesteps=TOTAL_TRAINING_STEPS,
     callback=None,
     reset_num_timesteps=True,
     tb_log_name='sac',
     progress_bar=False,
 )
-setup_done['reach_above'] = True
+setup_done['reach'] = True
+
+print(f'Evaluating at step 0...')
+successes, episode_rewards, episode_lengths = evaluate()
+eval_results[0] = {
+    'successes': successes,
+    'episode_rewards': episode_rewards,
+    'episode_lengths': episode_lengths
+}
+print(eval_results[0])
 
 for step in range(TOTAL_TRAINING_STEPS):
     task = env.unwrapped.current_task
@@ -99,5 +133,16 @@ for step in range(TOTAL_TRAINING_STEPS):
     task_sac.train(batch_size=task_sac.batch_size, gradient_steps=1)
     task_sac.logger.record("train/global_step", step)
 
+    if (step + 1) % EVAL_INTERVAL == 0:
+        print(f'Evaluating at step {step}...')
+        successes, episode_rewards, episode_lengths = evaluate()
+        eval_results[step + 1] = {
+            'successes': successes,
+            'episode_rewards': episode_rewards,
+            'episode_lengths': episode_lengths
+        }
+        print(eval_results[step + 1])
+
 for task in env.unwrapped.tasks:
     sac_agents[task].save(f'sac_{task}')
+np.save('eval_results.npy', eval_results)

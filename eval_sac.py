@@ -4,9 +4,6 @@ import numpy as np
 from stable_baselines3 import SAC
 
 
-TOTAL_TRAINING_STEPS = 1000000
-LOG_INTERVAL = 4
-
 env = gym.make('CompPickPlaceCan-v1')
 sac_agents = {}
 for task in env.unwrapped.tasks:
