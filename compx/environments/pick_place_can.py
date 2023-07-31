@@ -160,6 +160,7 @@ class CompPickPlaceCanEnv(gym.Env):
         truncated = False
         # The entire task is completed if the can is placed in the bin.
         if reward > 0:
+            info['episode_success'] = True
             terminated = True
             task_reward = 10
         if task_failed:

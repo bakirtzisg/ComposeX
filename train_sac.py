@@ -34,13 +34,13 @@ def evaluate():
         length = 0
         while not done:
             obs = eval_env.unwrapped._get_obs()
-            current_task = env.unwrapped.current_task
+            current_task = eval_env.unwrapped.current_task
             action, _states = sac_agents[current_task].predict(obs, deterministic=True)
             obs, reward, terminated, truncated, info = eval_env.step(action)
             done = terminated or truncated
             episode_rewards[i] += info['task_reward']
             length += 1
-        if terminated:
+        if terminated and 'episode_success' in info and info['episode_success']:
             successes[i] = True
         episode_lengths[i] = length
     return successes, episode_rewards, episode_lengths
