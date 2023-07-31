@@ -33,7 +33,7 @@ def evaluate():
         done = False
         length = 0
         while not done:
-            obs = env.unwrapped._get_obs()
+            obs = eval_env.unwrapped._get_obs()
             current_task = env.unwrapped.current_task
             action, _states = sac_agents[current_task].predict(obs, deterministic=True)
             obs, reward, terminated, truncated, info = eval_env.step(action)
