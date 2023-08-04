@@ -29,7 +29,6 @@ class CompLiftEnv(gym.Env):
         }
 
         self.current_task = 'reach'
-        self.init_cube_pos = None
         self.reward_criteria = None
         self.setup_skip_reset_once = False
         self.fresh_reset = False
@@ -56,25 +55,10 @@ class CompLiftEnv(gym.Env):
         else:
             raise RuntimeError('Invalid task')
         return obs
-    
-    def _get_hand_pos(self):
-        obs = self._env._get_observations()
-        return obs['robot0_eef_pos']
-    
-    def _get_cube_pos(self):
-        obs = self._env._get_observations()
-        return obs['cube_pos']
-
-    def _clip_hand_pos(self, hand_pos):
-        return hand_pos
 
     def _process_action(self, action):
         if self.current_task == 'lift':
             action = np.concatenate([[0, 0], action])
-        hand_pos = self._get_hand_pos()
-        resulting_hand_pos = hand_pos + action[:3] / 10
-        cliped_hand_pos = self._clip_hand_pos(resulting_hand_pos)
-        action[:3] = ((cliped_hand_pos - hand_pos) * 10).clip(-1, 1)
         if self.current_task == 'reach':
             action = np.concatenate([action, [-1]])
         return action
@@ -156,7 +140,6 @@ class CompLiftEnv(gym.Env):
             observation = self._env.reset()
             obs = self._get_obs()
             self.current_task = 'reach'
-            self.init_cube_pos = self._get_cube_pos()
             self.reward_criteria = self._compute_reward_criteria(observation)
         self.fresh_reset = True
         return obs, {'current_task': self.current_task,
