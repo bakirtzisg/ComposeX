@@ -106,12 +106,12 @@ if __name__ == '__main__':
             task_sac.env.envs[0].rewards = []
 
         actions, buffer_actions = task_sac._sample_action(task_sac.learning_starts, task_sac.action_noise, task_sac.env.num_envs)
-
         new_obs, rewards, dones, infos = task_sac.env.step(actions)
 
+        # When the entire task is done, logging has been automatically done.
         already_logged = dones[0]
 
-        rewards[0] = infos[0]['task_reward']
+        # Set dones for sub-tasks.
         dones[0] = infos[0]['task_terminated'] or dones[0]
 
         task_sac.num_timesteps += task_sac.env.num_envs

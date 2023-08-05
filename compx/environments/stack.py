@@ -6,7 +6,7 @@ from gymnasium.envs.registration import register
 
 
 class CompStackEnv(gym.Env):
-    def __init__(self):
+    def __init__(self, baseline_mode=False):
         config = load_controller_config(default_controller='OSC_POSITION')
         self._env = robosuite.make(
             env_name="Stack",
@@ -35,14 +35,21 @@ class CompStackEnv(gym.Env):
         self.reward_criteria = None
         self.setup_skip_reset_once = False
         self.fresh_reset = False
+        self.baseline_mode = baseline_mode
 
     @property
     def action_space(self):
-        return self.action_spaces[self.current_task]
+        if self.baseline_mode:
+            return gym.spaces.Box(low=-1, high=1, shape=(4,), dtype=np.float32)
+        else:
+            return self.action_spaces[self.current_task]
     
     @property
     def observation_space(self):
-        return self.observation_spaces[self.current_task]
+        if self.baseline_mode:
+            return gym.spaces.Box(low=-10, high=10, shape=(10,), dtype=np.float32)
+        else:
+            return self.observation_spaces[self.current_task]
 
     def _get_obs(self):
         obs = self._env._get_observations()
@@ -51,6 +58,10 @@ class CompStackEnv(gym.Env):
         cubeA_pos = obs['cubeA_pos']
         cubeB_pos = obs['cubeB_pos']
         gripper = obs['robot0_gripper_qpos'][0] * 2
+
+        if self.baseline_mode:
+            obs = np.concatenate([hand_pos, cubeA_pos, cubeB_pos, [gripper]]).astype(np.float32)
+            return obs
 
         if self.current_task == 'reach':
             obs = np.concatenate([hand_pos, cubeA_pos]).astype(np.float32)
@@ -63,6 +74,9 @@ class CompStackEnv(gym.Env):
         return obs
 
     def _process_action(self, action):
+        if self.baseline_mode:
+            return action
+
         if self.current_task == 'lift':
             action = np.concatenate([[0, 0], action])
         if self.current_task == 'reach':
@@ -169,4 +183,10 @@ def register_envs():
         id="CompStack-v1",
         entry_point=CompStackEnv,
         max_episode_steps=75
+    )
+    register(
+        id="BaselineCompStack-v1",
+        entry_point=CompStackEnv,
+        max_episode_steps=75,
+        kwargs={'baseline_mode': True}
     )

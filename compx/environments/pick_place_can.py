@@ -5,7 +5,7 @@ from robosuite import load_controller_config
 from gymnasium.envs.registration import register
 
 class CompPickPlaceCanEnv(gym.Env):
-    def __init__(self):
+    def __init__(self, baseline_mode=False):
         config = load_controller_config(default_controller='OSC_POSITION')
         self._env = robosuite.make(
             env_name="PickPlaceCan",
@@ -37,14 +37,21 @@ class CompPickPlaceCanEnv(gym.Env):
         self.reward_criteria = None
         self.setup_skip_reset_once = False
         self.fresh_reset = False
+        self.baseline_mode = baseline_mode
 
     @property
     def action_space(self):
-        return self.action_spaces[self.current_task]
+        if self.baseline_mode:
+            return gym.spaces.Box(low=-1, high=1, shape=(4,), dtype=np.float32)
+        else:
+            return self.action_spaces[self.current_task]
     
     @property
     def observation_space(self):
-        return self.observation_spaces[self.current_task]
+        if self.baseline_mode:
+            return gym.spaces.Box(low=-10, high=10, shape=(10,), dtype=np.float32)
+        else:
+            return self.observation_spaces[self.current_task]
 
     def _get_obs(self):
         obs = self._env._get_observations()
@@ -53,6 +60,10 @@ class CompPickPlaceCanEnv(gym.Env):
         can_pos = obs['Can_pos']
         gripper = obs['robot0_gripper_qpos'][0] * 2
         goal_pos = self._env.target_bin_placements[self._env.object_to_id['can']]
+
+        if self.baseline_mode:
+            obs = np.concatenate([hand_pos, can_pos, goal_pos, [gripper]]).astype(np.float32)
+            return obs
 
         if self.current_task == 'reach':
             obs = np.concatenate([hand_pos, can_pos]).astype(np.float32)
@@ -84,6 +95,9 @@ class CompPickPlaceCanEnv(gym.Env):
         return hand_pos
 
     def _process_action(self, action):
+        if self.baseline_mode:
+            return action
+
         if self.current_task == 'lift':
             action = np.concatenate([[0, 0], action])
         hand_pos = self._get_hand_pos()
@@ -214,4 +228,10 @@ def register_envs():
         id="CompPickPlaceCan-v1",
         entry_point=CompPickPlaceCanEnv,
         max_episode_steps=100
+    )
+    register(
+        id="BaselineCompPickPlaceCan-v1",
+        entry_point=CompPickPlaceCanEnv,
+        max_episode_steps=100,
+        kwargs={'baseline_mode': True}
     )
