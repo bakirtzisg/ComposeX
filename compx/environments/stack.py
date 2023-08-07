@@ -102,20 +102,25 @@ class CompStackEnv(gym.Env):
         task_failed = False
 
         new_reward_criteria = self._compute_reward_criteria(observation)
-        if self.current_task == 'reach':
-            task_reward = self.reward_criteria['reach_dist'] - new_reward_criteria['reach_dist']
-            if new_reward_criteria['reach_dist'] < 0.01:
-                task_completed = True
-        elif self.current_task == 'lift':
+        if self.baseline_mode:
             task_reward = self.reward_criteria['reach_dist'] - new_reward_criteria['reach_dist']
             task_reward += new_reward_criteria['cubeA_height'] - self.reward_criteria['cubeA_height']
-            if new_reward_criteria['cubeA_height'] > 0.9:
-                task_completed = True
-        elif self.current_task == 'place':
             task_reward = self.reward_criteria['goal_dist'] - new_reward_criteria['goal_dist']
+        else:
+            if self.current_task == 'reach':
+                task_reward = self.reward_criteria['reach_dist'] - new_reward_criteria['reach_dist']
+                if new_reward_criteria['reach_dist'] < 0.01:
+                    task_completed = True
+            elif self.current_task == 'lift':
+                task_reward = self.reward_criteria['reach_dist'] - new_reward_criteria['reach_dist']
+                task_reward += new_reward_criteria['cubeA_height'] - self.reward_criteria['cubeA_height']
+                if new_reward_criteria['cubeA_height'] > 0.9:
+                    task_completed = True
+            elif self.current_task == 'place':
+                task_reward = self.reward_criteria['goal_dist'] - new_reward_criteria['goal_dist']
 
-        if task_completed:
-            task_reward = 10
+            if task_completed:
+                task_reward = 10
 
         self.reward_criteria = new_reward_criteria
         return task_reward, task_completed, task_failed

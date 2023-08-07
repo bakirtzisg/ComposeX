@@ -92,21 +92,22 @@ class CompLiftEnv(gym.Env):
         task_failed = False
 
         new_reward_criteria = self._compute_reward_criteria(observation)
-        if self.current_task == 'reach':
-            task_reward = self.reward_criteria['reach_dist'] - new_reward_criteria['reach_dist']
-            if new_reward_criteria['reach_dist'] < 0.01:
-                task_completed = True
-        elif self.current_task == 'lift':
+        if self.baseline_mode:
             task_reward = self.reward_criteria['reach_dist'] - new_reward_criteria['reach_dist']
             task_reward += new_reward_criteria['cube_height'] - self.reward_criteria['cube_height']
-            # if observation['cube_pos'][2] > 1:
-            #     task_completed = True
+        else:
+            if self.current_task == 'reach':
+                task_reward = self.reward_criteria['reach_dist'] - new_reward_criteria['reach_dist']
+                if new_reward_criteria['reach_dist'] < 0.01:
+                    task_completed = True
+            elif self.current_task == 'lift':
+                task_reward = self.reward_criteria['reach_dist'] - new_reward_criteria['reach_dist']
+                task_reward += new_reward_criteria['cube_height'] - self.reward_criteria['cube_height']
 
-        if task_completed:
-            task_reward = 10
+            if task_completed:
+                task_reward = 10
 
         self.reward_criteria = new_reward_criteria
-
         return task_reward, task_completed, task_failed
 
     def step(self, action):

@@ -77,22 +77,9 @@ class CompPickPlaceCanEnv(gym.Env):
             raise RuntimeError('Invalid task')
         return obs
     
-    def _get_hand_pos(self):
-        obs = self._env._get_observations()
-        return obs['robot0_eef_pos']
-    
     def _get_can_pos(self):
         obs = self._env._get_observations()
         return obs['Can_pos']
-
-    def _clip_hand_pos(self, hand_pos):
-        if self.current_task == 'reach':
-            hand_pos = hand_pos.clip([-0.15, -0.5, 0.8], [0.35, 0, 1.1])
-        elif self.current_task == 'move':
-            hand_pos = hand_pos.clip([-0.15, -0.5, 1], [0.35, 0.53, 1.2])
-        elif self.current_task == 'place':
-            hand_pos = hand_pos.clip([-0.15, 0.03, 1], [0.35, 0.53, 1.2])
-        return hand_pos
 
     def _process_action(self, action):
         if self.baseline_mode:
@@ -100,10 +87,6 @@ class CompPickPlaceCanEnv(gym.Env):
 
         if self.current_task == 'lift':
             action = np.concatenate([[0, 0], action])
-        hand_pos = self._get_hand_pos()
-        resulting_hand_pos = hand_pos + action[:3] / 10
-        cliped_hand_pos = self._clip_hand_pos(resulting_hand_pos)
-        action[:3] = ((cliped_hand_pos - hand_pos) * 10).clip(-1, 1)
         if self.current_task == 'reach':
             action = np.concatenate([action, [-1]])
         elif self.current_task == 'move':
@@ -131,37 +114,37 @@ class CompPickPlaceCanEnv(gym.Env):
         task_failed = False
 
         new_reward_criteria = self._compute_reward_criteria(observation)
-        if self.current_task == 'reach':
-            task_reward = self.reward_criteria['reach_dist'] - new_reward_criteria['reach_dist']
-            # task_reward = -reach_dist * np.exp(reach_dist)
-            if new_reward_criteria['can_displacement'] > 0.01:
-                task_failed = True
-            elif new_reward_criteria['reach_dist'] < 0.01:
-                task_completed = True
-        elif self.current_task == 'lift':
+        if self.baseline_mode:
             task_reward = self.reward_criteria['reach_dist'] - new_reward_criteria['reach_dist']
             task_reward += new_reward_criteria['can_height'] - self.reward_criteria['can_height']
-            # task_reward = -grasp_dist * np.exp(grasp_dist)
-            if observation['Can_pos'][2] > 1:
-                task_completed = True
-        elif self.current_task == 'move':
-            task_reward = self.reward_criteria['move_dist'] - new_reward_criteria['move_dist']
-            # task_reward = -move_dist * np.exp(move_dist)
-            if observation['robot0_eef_pos'][1] > 0.03:
-                task_completed = True
-        elif self.current_task == 'place':
-            task_reward = self.reward_criteria['goal_dist'] - new_reward_criteria['goal_dist']
-            # task_reward = -goal_dist * np.exp(goal_dist)
-
-        # task_reward = abs(task_reward)
+            task_reward += self.reward_criteria['goal_dist'] - new_reward_criteria['goal_dist']
+        else:
+            if self.current_task == 'reach':
+                task_reward = self.reward_criteria['reach_dist'] - new_reward_criteria['reach_dist']
+                # task_reward = -reach_dist * np.exp(reach_dist)
+                if new_reward_criteria['can_displacement'] > 0.01:
+                    task_failed = True
+                elif new_reward_criteria['reach_dist'] < 0.01:
+                    task_completed = True
+            elif self.current_task == 'lift':
+                task_reward = self.reward_criteria['reach_dist'] - new_reward_criteria['reach_dist']
+                task_reward += new_reward_criteria['can_height'] - self.reward_criteria['can_height']
+                # task_reward = -grasp_dist * np.exp(grasp_dist)
+                if observation['Can_pos'][2] > 1:
+                    task_completed = True
+            elif self.current_task == 'move':
+                task_reward = self.reward_criteria['move_dist'] - new_reward_criteria['move_dist']
+                # task_reward = -move_dist * np.exp(move_dist)
+                if observation['robot0_eef_pos'][1] > 0.03:
+                    task_completed = True
+            elif self.current_task == 'place':
+                task_reward = self.reward_criteria['goal_dist'] - new_reward_criteria['goal_dist']
+                # task_reward = -goal_dist * np.exp(goal_dist)
 
         if task_completed:
             task_reward = 10
-        # elif task_failed:
-        #     task_reward = -100
 
         self.reward_criteria = new_reward_criteria
-
         return task_reward, task_completed, task_failed
 
     def step(self, action):
