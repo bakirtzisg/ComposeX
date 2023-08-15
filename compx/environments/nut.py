@@ -12,7 +12,7 @@ class CompNutEnv(gym.Env):
             env_name="NutAssemblyRound",
             robots="Panda",
             controller_configs=config,
-            has_renderer=True,
+            has_renderer=False,
             has_offscreen_renderer=False,
             ignore_done=False,
             use_camera_obs=False,

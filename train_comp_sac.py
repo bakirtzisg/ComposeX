@@ -19,7 +19,7 @@ NUM_EVAL_EPISODES = 20
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--env_name', type=str, default='CompStack-v1')
+    parser.add_argument('--env_name', type=str, default='CompNut-v1')
     args = parser.parse_args()
     return args
 

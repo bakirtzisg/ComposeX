@@ -6,7 +6,7 @@ import argparse
 from stable_baselines3 import SAC
 
 
-TOTAL_TRAINING_STEPS = 1000000
+TOTAL_TRAINING_STEPS = 500000
 LOG_INTERVAL = 4
 EVAL_INTERVAL = 2000
 NUM_EVAL_EPISODES = 20
@@ -16,7 +16,8 @@ def parse_args():
     parser = argparse.ArgumentParser()
     # parser.add_argument('--env_name', type=str, default='BaselineCompLift-v1')
     # parser.add_argument('--env_name', type=str, default='BaselineCompStack-v1')
-    parser.add_argument('--env_name', type=str, default='BaselineCompPickPlaceCan-v1')
+    parser.add_argument('--env_name', type=str, default='BaselineCompNut-v1')
+    # parser.add_argument('--env_name', type=str, default='BaselineCompPickPlaceCan-v1')
     args = parser.parse_args()
     return args
 
