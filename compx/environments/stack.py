@@ -105,7 +105,7 @@ class CompStackEnv(gym.Env):
         if self.baseline_mode:
             task_reward = self.reward_criteria['reach_dist'] - new_reward_criteria['reach_dist']
             task_reward += new_reward_criteria['cubeA_height'] - self.reward_criteria['cubeA_height']
-            task_reward = self.reward_criteria['goal_dist'] - new_reward_criteria['goal_dist']
+            task_reward += self.reward_criteria['goal_dist'] - new_reward_criteria['goal_dist']
         else:
             if self.current_task == 'reach':
                 task_reward = self.reward_criteria['reach_dist'] - new_reward_criteria['reach_dist']
@@ -114,7 +114,7 @@ class CompStackEnv(gym.Env):
             elif self.current_task == 'lift':
                 task_reward = self.reward_criteria['reach_dist'] - new_reward_criteria['reach_dist']
                 task_reward += new_reward_criteria['cubeA_height'] - self.reward_criteria['cubeA_height']
-                if new_reward_criteria['cubeA_height'] > 0.9:
+                if new_reward_criteria['cubeA_height'] > 0.84:
                     task_completed = True
             elif self.current_task == 'place':
                 task_reward = self.reward_criteria['goal_dist'] - new_reward_criteria['goal_dist']

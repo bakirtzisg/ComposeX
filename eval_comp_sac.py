@@ -1,13 +1,13 @@
-import gymnasium as gym 
+import gymnasium as gym
 import compx
 import numpy as np
 from stable_baselines3 import SAC
 
 
-env = gym.make('CompPickPlaceCan-v1')
+env = gym.make("CompPickPlaceCan-v1")
 sac_agents = {}
 for task in env.unwrapped.tasks:
-    sac_agents[task] = SAC.load(f'sac_{task}')
+    sac_agents[task] = SAC.load(f"sac_{task}")
 
 done = True
 
